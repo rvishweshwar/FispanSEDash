@@ -13,18 +13,50 @@
         .data-table-container { max-height: 400px; overflow-y: auto; }
         .delete-btn { background-color: #f87171; color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: background-color 0.2s; }
         .delete-btn:hover { background-color: #ef4444; }
+        .reset-btn { background-color: #6b7280; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.875rem; cursor: pointer; transition: background-color 0.2s; }
+        .reset-btn:hover { background-color: #4b5563; }
+        .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #4F46E5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
+<div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="text-center">
+        <div class="spinner mx-auto mb-4"></div>
+        <p class="text-gray-700 font-medium">Loading data...</p>
+    </div>
+</div>
+
 <div class="container mx-auto p-4 md:p-8">
 
-    <h1 class="text-4xl font-bold text-gray-900 mb-6">SE Capacity & Pipeline Dashboard</h1>
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <h1 class="text-4xl font-bold text-gray-900">SE Capacity & Pipeline Dashboard</h1>
+        <button onclick="resetToDefaults()" class="reset-btn">Reset to Default Data</button>
+    </div>
+
+    <!-- Configuration Notice -->
+    <div id="configNotice" class="card bg-yellow-50 border-2 border-yellow-400">
+        <h2 class="text-lg font-semibold text-yellow-800 mb-2">⚠️ Configuration Required</h2>
+        <p class="text-sm text-yellow-700 mb-3">
+            Please add your Google Apps Script Web App URL in the code (line 54). 
+            <a href="#" onclick="alert('Instructions:\\n1. Open your Google Sheet\\n2. Go to Extensions > Apps Script\\n3. Deploy as Web App\\n4. Copy the URL\\n5. Replace SCRIPT_URL in the code'); return false;" class="underline font-medium">Click for setup instructions</a>
+        </p>
+    </div>
+
+    <!-- Shared Data Notice -->
+    <div class="card bg-blue-50 border border-blue-200">
+        <p class="text-sm text-blue-800">
+            <strong>📊 Shared Dashboard:</strong> All data is stored in Google Sheets and synced across all team members. 
+            Changes may take a few seconds to sync.
+        </p>
+    </div>
 
     <!-- 1. ADD NEW BANK FORM -->
     <div class="card">
         <h2 class="text-xl font-semibold text-gray-700 mb-4">Add New Bank Assignment</h2>
-        <form id="addBankForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
             <div>
                 <label for="bankName" class="block text-sm font-medium text-gray-700">Bank Name</label>
                 <input type="text" id="bankName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
@@ -45,10 +77,10 @@
                     <option value="Bottom of Funnel">Bottom of Funnel</option>
                 </select>
             </div>
-            <button type="submit" class="w-full md:w-auto px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150">
+            <button onclick="addBank()" class="w-full md:w-auto px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150">
                 Add Bank
             </button>
-        </form>
+        </div>
     </div>
 
     <!-- 2. INTERACTIVE CHARTS -->
@@ -103,8 +135,14 @@
 </div>
 
 <script>
-    // --- INITIAL DATA ---
-    let bankData = [
+    // ========================================
+    // CONFIGURATION - REPLACE THIS WITH YOUR GOOGLE APPS SCRIPT WEB APP URL
+    // ========================================
+    const SCRIPT_URL = 'https://script.google.com/a/macros/fispan.com/s/AKfycbyCx8X33uRS6lLQPYYKp1ePBKd9kGFoOWOpuvetmIoirl_6hbdIfCMe_zLYbuDJUZ0G/exec';
+    // ========================================
+
+    // --- DEFAULT DATA (used for reset) ---
+    const defaultBankData = [
         { name: "First National Bank", se: "Rudra", stage: "Middle of Funnel" },
         { name: "Apex Global Credit", se: "Rudra", stage: "Top of Funnel" },
         { name: "Community Financials", se: "Rudra", stage: "Middle of Funnel" },
@@ -116,20 +154,91 @@
         { name: "Scoping Client Z", se: "Liam", stage: "Bottom of Funnel" },
     ];
 
+    let bankData = [];
     const funnelStages = ["Top of Funnel", "Middle of Funnel", "Bottom of Funnel"];
     const seNames = ["Rudra", "David", "Liam"];
     const stageColors = {
-        "Top of Funnel": '#4F46E5',   // Indigo (Prospecting/Demoing)
-        "Middle of Funnel": '#10B981', // Emerald (Deep Dives)
-        "Bottom of Funnel": '#F59E0B', // Amber (Scoping/Estimate)
+        "Top of Funnel": '#4F46E5',
+        "Middle of Funnel": '#10B981',
+        "Bottom of Funnel": '#F59E0B',
     };
 
     let capacityChartInstance = null;
     let funnelChartInstance = null;
 
     // --- UTILITY FUNCTIONS ---
+    
+    function showLoading(show = true) {
+        document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+    }
 
-    // 1. Calculate the core metrics for charting
+    function showError(message) {
+        alert('Error: ' + message);
+    }
+
+    // Load data from Google Sheets
+    async function loadData() {
+        if (!SCRIPT_URL || SCRIPT_URL === 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE') {
+            console.warn('Google Apps Script URL not configured. Using default data.');
+            bankData = [...defaultBankData];
+            refreshDashboard();
+            return;
+        }
+
+        showLoading(true);
+        try {
+            const response = await fetch(SCRIPT_URL);
+            const data = await response.json();
+            
+            if (data && Array.isArray(data) && data.length > 0) {
+                bankData = data.filter(bank => bank.name); // Filter out empty rows
+            } else {
+                console.log('No data in sheet, using defaults');
+                bankData = [...defaultBankData];
+                await saveData(); // Initialize sheet with default data
+            }
+        } catch (error) {
+            console.error('Error loading data:', error);
+            showError('Failed to load data from Google Sheets. Using default data.');
+            bankData = [...defaultBankData];
+        } finally {
+            showLoading(false);
+            refreshDashboard();
+        }
+    }
+
+    // Save data to Google Sheets
+    async function saveData() {
+        if (!SCRIPT_URL || SCRIPT_URL === 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE') {
+            console.warn('Google Apps Script URL not configured. Data not saved.');
+            return false;
+        }
+
+        showLoading(true);
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(bankData)
+            });
+            
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to save');
+            }
+            return true;
+        } catch (error) {
+            console.error('Error saving data:', error);
+            showError('Failed to save data to Google Sheets.');
+            return false;
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // Calculate metrics for charts
     function calculateMetrics(filterSE) {
         let filteredData = bankData;
         
@@ -137,19 +246,16 @@
             filteredData = bankData.filter(bank => bank.se === filterSE);
         }
 
-        // Capacity Count (Used for Chart 1) - Always for all SEs
         const seCounts = seNames.map(se => bankData.filter(bank => bank.se === se).length);
-
-        // Stage Count (Used for Chart 2) - Can be filtered
         const stageCounts = funnelStages.map(stage => filteredData.filter(bank => bank.stage === stage).length);
         
         return { seCounts, stageCounts, filteredData };
     }
 
-    // 2. Render the interactive table
+    // Render the table
     function renderTable() {
         const tableBody = document.getElementById('dataTableBody');
-        tableBody.innerHTML = ''; // Clear existing rows
+        tableBody.innerHTML = '';
 
         const seColorMap = {
             "Rudra": "bg-indigo-50",
@@ -170,13 +276,13 @@
                     </span>
                 </td>
                 <td class="px-6 py-4 text-sm font-medium">
-                    <button class="delete-btn" data-index="${index}" onclick="deleteBank(${index})">Delete</button>
+                    <button class="delete-btn" onclick="deleteBank(${index})">Delete</button>
                 </td>
             `;
         });
     }
 
-    // 3. Update Chart 1 (SE Capacity Bar Chart)
+    // Update Capacity Chart
     function updateCapacityChart(seCounts) {
         const ctx = document.getElementById('capacityChart').getContext('2d');
 
@@ -212,7 +318,7 @@
         });
     }
 
-    // 4. Update Chart 2 (Funnel Distribution Doughnut Chart)
+    // Update Funnel Chart
     function updateFunnelChart(stageCounts, filterSE) {
         const ctx = document.getElementById('funnelChart').getContext('2d');
         const total = stageCounts.reduce((a, b) => a + b, 0);
@@ -221,7 +327,6 @@
             funnelChartInstance.destroy();
         }
         
-        // Update Chart Title
         const titleElement = document.getElementById('funnelChartTitle');
         titleElement.textContent = filterSE === 'All SEs' ? 
             'Funnel Distribution for Team Total' : 
@@ -242,9 +347,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        position: 'right',
-                    },
+                    legend: { position: 'right' },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
@@ -263,41 +366,64 @@
         });
     }
 
-    // 5. Main dashboard refresh function
+    // Refresh dashboard
     function refreshDashboard() {
         const filterSE = document.getElementById('seFilter').value;
         const { seCounts, stageCounts } = calculateMetrics(filterSE);
         
         renderTable();
-        updateCapacityChart(calculateMetrics('All SEs').seCounts); // Capacity always shows all SEs
-        updateFunnelChart(stageCounts, filterSE); // Funnel Distribution is filtered
+        updateCapacityChart(calculateMetrics('All SEs').seCounts);
+        updateFunnelChart(stageCounts, filterSE);
     }
 
-    // --- INTERACTIVE HANDLERS ---
-
-    // Function to handle adding a new bank
-    document.getElementById('addBankForm').addEventListener('submit', function(e) {
-        e.preventDefault();
+    // Add new bank
+    async function addBank() {
         const bankName = document.getElementById('bankName').value.trim();
         const se = document.getElementById('seName').value;
         const stage = document.getElementById('funnelStage').value;
 
         if (bankName) {
             bankData.push({ name: bankName, se: se, stage: stage });
-            refreshDashboard();
-            e.target.reset(); // Clear the form
+            const success = await saveData();
+            if (success) {
+                refreshDashboard();
+                document.getElementById('bankName').value = '';
+            } else {
+                bankData.pop(); // Revert if save failed
+            }
         }
-    });
-
-    // Function to handle deleting a bank
-    window.deleteBank = function(index) {
-        // Use index to remove the bank from the array
-        bankData.splice(index, 1);
-        refreshDashboard();
     }
 
-    // --- INITIALIZATION ---
-    window.onload = refreshDashboard;
+    // Delete bank
+    async function deleteBank(index) {
+        const backup = [...bankData];
+        bankData.splice(index, 1);
+        const success = await saveData();
+        if (success) {
+            refreshDashboard();
+        } else {
+            bankData = backup; // Revert if save failed
+        }
+    }
+
+    // Reset to defaults
+    async function resetToDefaults() {
+        if (confirm('Are you sure you want to reset all data to defaults? This will affect all users.')) {
+            bankData = [...defaultBankData];
+            const success = await saveData();
+            if (success) {
+                refreshDashboard();
+            }
+        }
+    }
+
+    // Auto-refresh every 30 seconds to get updates from other users
+    setInterval(async () => {
+        await loadData();
+    }, 30000);
+
+    // Initialize on load
+    window.onload = loadData;
 </script>
 
 </body>
