@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FISPAN SE Capacity Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7fafc; }
+        .card { background-color: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); padding: 1.5rem; margin-bottom: 1.5rem; }
+        .data-table-container { max-height: 400px; overflow-y: auto; }
+        .delete-btn { background-color: #f87171; color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: background-color 0.2s; }
+        .delete-btn:hover { background-color: #ef4444; }
+    </style>
+</head>
+<body>
+
+<div class="container mx-auto p-4 md:p-8">
+
+    <h1 class="text-4xl font-bold text-gray-900 mb-6">SE Capacity & Pipeline Dashboard</h1>
+
+    <!-- 1. ADD NEW BANK FORM -->
+    <div class="card">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Add New Bank Assignment</h2>
+        <form id="addBankForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+                <label for="bankName" class="block text-sm font-medium text-gray-700">Bank Name</label>
+                <input type="text" id="bankName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+            </div>
+            <div>
+                <label for="seName" class="block text-sm font-medium text-gray-700">Solution Engineer</label>
+                <select id="seName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-white">
+                    <option value="Rudra">Rudra</option>
+                    <option value="David">David</option>
+                    <option value="Liam">Liam</option>
+                </select>
+            </div>
+            <div>
+                <label for="funnelStage" class="block text-sm font-medium text-gray-700">Funnel Stage</label>
+                <select id="funnelStage" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-white">
+                    <option value="Top of Funnel">Top of Funnel</option>
+                    <option value="Middle of Funnel">Middle of Funnel</option>
+                    <option value="Bottom of Funnel">Bottom of Funnel</option>
+                </select>
+            </div>
+            <button type="submit" class="w-full md:w-auto px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150">
+                Add Bank
+            </button>
+        </form>
+    </div>
+
+    <!-- 2. INTERACTIVE CHARTS -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Chart 1: Overall Capacity -->
+        <div class="card lg:col-span-1 flex flex-col justify-center">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4 text-center">SE Capacity (Banks Assigned)</h2>
+            <div class="h-64 flex items-center justify-center">
+                <canvas id="capacityChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 2: Funnel Distribution Filtered -->
+        <div class="card lg:col-span-2">
+            <h2 id="funnelChartTitle" class="text-xl font-semibold text-gray-700 mb-4">Funnel Distribution for Team Total</h2>
+            <div class="mb-4 flex items-center space-x-3">
+                <label for="seFilter" class="text-sm font-medium text-gray-700">Filter By SE:</label>
+                <select id="seFilter" class="rounded-md border-gray-300 shadow-sm p-2 border bg-white" onchange="refreshDashboard()">
+                    <option value="All SEs">All SEs (Team Total)</option>
+                    <option value="Rudra">Rudra</option>
+                    <option value="David">David</option>
+                    <option value="Liam">Liam</option>
+                </select>
+            </div>
+            <div class="h-80">
+                <canvas id="funnelChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. RAW DATA TABLE -->
+    <div class="card">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Raw Assignment Data (Click Delete to Remove)</h2>
+        <div class="data-table-container">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50 sticky top-0">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Solution Engineer</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Funnel Stage</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTableBody" class="bg-white divide-y divide-gray-200">
+                    <!-- Data will be populated here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- INITIAL DATA ---
+    let bankData = [
+        { name: "First National Bank", se: "Rudra", stage: "Middle of Funnel" },
+        { name: "Apex Global Credit", se: "Rudra", stage: "Top of Funnel" },
+        { name: "Community Financials", se: "Rudra", stage: "Middle of Funnel" },
+        { name: "Pacific Coast Trust", se: "David", stage: "Bottom of Funnel" },
+        { name: "Millennium Bank", se: "David", stage: "Top of Funnel" },
+        { name: "New Prospect A", se: "David", stage: "Top of Funnel" },
+        { name: "Aurora Savings Co.", se: "Liam", stage: "Middle of Funnel" },
+        { name: "Global Tech Solutions", se: "Liam", stage: "Bottom of Funnel" },
+        { name: "Scoping Client Z", se: "Liam", stage: "Bottom of Funnel" },
+    ];
+
+    const funnelStages = ["Top of Funnel", "Middle of Funnel", "Bottom of Funnel"];
+    const seNames = ["Rudra", "David", "Liam"];
+    const stageColors = {
+        "Top of Funnel": '#4F46E5',   // Indigo (Prospecting/Demoing)
+        "Middle of Funnel": '#10B981', // Emerald (Deep Dives)
+        "Bottom of Funnel": '#F59E0B', // Amber (Scoping/Estimate)
+    };
+
+    let capacityChartInstance = null;
+    let funnelChartInstance = null;
+
+    // --- UTILITY FUNCTIONS ---
+
+    // 1. Calculate the core metrics for charting
+    function calculateMetrics(filterSE) {
+        let filteredData = bankData;
+        
+        if (filterSE && filterSE !== 'All SEs') {
+            filteredData = bankData.filter(bank => bank.se === filterSE);
+        }
+
+        // Capacity Count (Used for Chart 1) - Always for all SEs
+        const seCounts = seNames.map(se => bankData.filter(bank => bank.se === se).length);
+
+        // Stage Count (Used for Chart 2) - Can be filtered
+        const stageCounts = funnelStages.map(stage => filteredData.filter(bank => bank.stage === stage).length);
+        
+        return { seCounts, stageCounts, filteredData };
+    }
+
+    // 2. Render the interactive table
+    function renderTable() {
+        const tableBody = document.getElementById('dataTableBody');
+        tableBody.innerHTML = ''; // Clear existing rows
+
+        const seColorMap = {
+            "Rudra": "bg-indigo-50",
+            "David": "bg-emerald-50",
+            "Liam": "bg-amber-50"
+        };
+
+        bankData.forEach((bank, index) => {
+            const row = tableBody.insertRow();
+            row.className = `whitespace-nowrap transition-colors duration-150 hover:bg-gray-100 ${seColorMap[bank.se]}`;
+            
+            row.innerHTML = `
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">${bank.name}</td>
+                <td class="px-6 py-4 text-sm text-gray-500">${bank.se}</td>
+                <td class="px-6 py-4">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" style="background-color: ${stageColors[bank.stage]}20; color: ${stageColors[bank.stage]};">
+                        ${bank.stage}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm font-medium">
+                    <button class="delete-btn" data-index="${index}" onclick="deleteBank(${index})">Delete</button>
+                </td>
+            `;
+        });
+    }
+
+    // 3. Update Chart 1 (SE Capacity Bar Chart)
+    function updateCapacityChart(seCounts) {
+        const ctx = document.getElementById('capacityChart').getContext('2d');
+
+        if (capacityChartInstance) {
+            capacityChartInstance.destroy();
+        }
+
+        capacityChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: seNames,
+                datasets: [{
+                    label: 'Banks Assigned',
+                    data: seCounts,
+                    backgroundColor: ['#4F46E5', '#10B981', '#F59E0B'],
+                    borderColor: ['#3730A3', '#059669', '#D97706'],
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Number of Banks' },
+                        ticks: { precision: 0 }
+                    }
+                }
+            }
+        });
+    }
+
+    // 4. Update Chart 2 (Funnel Distribution Doughnut Chart)
+    function updateFunnelChart(stageCounts, filterSE) {
+        const ctx = document.getElementById('funnelChart').getContext('2d');
+        const total = stageCounts.reduce((a, b) => a + b, 0);
+        
+        if (funnelChartInstance) {
+            funnelChartInstance.destroy();
+        }
+        
+        // Update Chart Title
+        const titleElement = document.getElementById('funnelChartTitle');
+        titleElement.textContent = filterSE === 'All SEs' ? 
+            'Funnel Distribution for Team Total' : 
+            `Funnel Distribution for ${filterSE}`;
+
+        funnelChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: funnelStages,
+                datasets: [{
+                    label: 'Number of Banks',
+                    data: stageCounts,
+                    backgroundColor: funnelStages.map(stage => stageColors[stage]),
+                    hoverOffset: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) { label += ': '; }
+                                if (context.parsed !== null) {
+                                    const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                                    label += `${context.parsed} Banks (${percentage}%)`;
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 5. Main dashboard refresh function
+    function refreshDashboard() {
+        const filterSE = document.getElementById('seFilter').value;
+        const { seCounts, stageCounts } = calculateMetrics(filterSE);
+        
+        renderTable();
+        updateCapacityChart(calculateMetrics('All SEs').seCounts); // Capacity always shows all SEs
+        updateFunnelChart(stageCounts, filterSE); // Funnel Distribution is filtered
+    }
+
+    // --- INTERACTIVE HANDLERS ---
+
+    // Function to handle adding a new bank
+    document.getElementById('addBankForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const bankName = document.getElementById('bankName').value.trim();
+        const se = document.getElementById('seName').value;
+        const stage = document.getElementById('funnelStage').value;
+
+        if (bankName) {
+            bankData.push({ name: bankName, se: se, stage: stage });
+            refreshDashboard();
+            e.target.reset(); // Clear the form
+        }
+    });
+
+    // Function to handle deleting a bank
+    window.deleteBank = function(index) {
+        // Use index to remove the bank from the array
+        bankData.splice(index, 1);
+        refreshDashboard();
+    }
+
+    // --- INITIALIZATION ---
+    window.onload = refreshDashboard;
+</script>
+
+</body>
+</html>
