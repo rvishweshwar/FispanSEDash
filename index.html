@@ -144,11 +144,12 @@
     // ========================================
 
     // Initialize Supabase client
-    let supabase;
+    let supabaseClient;
     let isConfigured = false;
 
     if (SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE' && SUPABASE_KEY !== 'YOUR_SUPABASE_ANON_KEY_HERE') {
-        supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const { createClient } = supabase;
+        supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
         isConfigured = true;
         document.getElementById('configNotice').style.display = 'none';
     }
@@ -199,7 +200,7 @@
 
         showLoading(true);
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('banks')
                 .select('*')
                 .order('id', { ascending: true });
@@ -240,7 +241,7 @@
 
         showLoading(true);
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('banks')
                 .insert([{ name: bankName, se: se, stage: stage }])
                 .select();
@@ -270,7 +271,7 @@
 
         showLoading(true);
         try {
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('banks')
                 .delete()
                 .eq('id', id);
@@ -300,7 +301,7 @@
         showLoading(true);
         try {
             // Delete all existing data
-            const { error: deleteError } = await supabase
+            const { error: deleteError } = await supabaseClient
                 .from('banks')
                 .delete()
                 .neq('id', 0); // Delete all rows
@@ -308,7 +309,7 @@
             if (deleteError) throw deleteError;
 
             // Insert default data
-            const { error: insertError } = await supabase
+            const { error: insertError } = await supabaseClient
                 .from('banks')
                 .insert(defaultBankData);
 
@@ -465,7 +466,7 @@
     function setupRealtimeSubscription() {
         if (!isConfigured) return;
 
-        supabase
+        supabaseClient
             .channel('banks-changes')
             .on('postgres_changes', 
                 { event: '*', schema: 'public', table: 'banks' },
