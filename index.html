@@ -19,6 +19,10 @@
         .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #4F46E5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .tab-button { padding: 0.5rem 1rem; border-radius: 8px; font-weight: 500; transition: all 0.2s; cursor: pointer; }
+        .tab-button.active { background-color: #4F46E5; color: white; }
+        .tab-button:not(.active) { background-color: #e5e7eb; color: #6b7280; }
+        .tab-button:not(.active):hover { background-color: #d1d5db; }
     </style>
 </head>
 <body>
@@ -41,8 +45,8 @@
     <div id="configNotice" class="card bg-yellow-50 border-2 border-yellow-400">
         <h2 class="text-lg font-semibold text-yellow-800 mb-2">⚠️ Configuration Required</h2>
         <p class="text-sm text-yellow-700 mb-3">
-            Please add your Supabase URL and API key in the code (lines 60-61).
-            <a href="#" onclick="alert('Setup Instructions:\\n\\n1. Go to supabase.com and create a project\\n2. Create the banks table using the SQL in the instructions\\n3. Get your Project URL and anon key from Project Settings > API\\n4. Replace SUPABASE_URL and SUPABASE_KEY in the code'); return false;" class="underline font-medium">View setup instructions</a>
+            Please add your Supabase URL and API key in the code (lines 199-200).
+            <a href="#" onclick="alert('Setup Instructions:\\n\\n1. Go to supabase.com and create a project\\n2. Create the assignments table using the SQL in the instructions\\n3. Get your Project URL and anon key from Project Settings > API\\n4. Replace SUPABASE_URL and SUPABASE_KEY in the code'); return false;" class="underline font-medium">View setup instructions</a>
         </p>
     </div>
 
@@ -54,13 +58,20 @@
         </p>
     </div>
 
-    <!-- 1. ADD NEW BANK FORM -->
+    <!-- 1. ADD NEW ASSIGNMENT FORM -->
     <div class="card">
-        <h2 class="text-xl font-semibold text-gray-700 mb-4">Add New Bank Assignment</h2>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Add New Assignment</h2>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div>
-                <label for="bankName" class="block text-sm font-medium text-gray-700">Bank Name</label>
-                <input type="text" id="bankName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+                <label for="opportunityType" class="block text-sm font-medium text-gray-700">Type</label>
+                <select id="opportunityType" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-white">
+                    <option value="Bank">Bank</option>
+                    <option value="ERP">ERP</option>
+                </select>
+            </div>
+            <div>
+                <label for="opportunityName" class="block text-sm font-medium text-gray-700">Name</label>
+                <input type="text" id="opportunityName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" placeholder="Enter bank or ERP name">
             </div>
             <div>
                 <label for="seName" class="block text-sm font-medium text-gray-700">Solution Engineer</label>
@@ -78,49 +89,142 @@
                     <option value="Bottom of Funnel">Bottom of Funnel</option>
                 </select>
             </div>
-            <button onclick="addBank()" class="w-full md:w-auto px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150">
-                Add Bank
+            <button onclick="addAssignment()" class="w-full md:w-auto px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150">
+                Add Assignment
             </button>
         </div>
     </div>
 
     <!-- 2. INTERACTIVE CHARTS -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <!-- Chart 1: Overall Capacity -->
-        <div class="card lg:col-span-1 flex flex-col justify-center">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4 text-center">SE Capacity (Banks Assigned)</h2>
-            <div class="h-64 flex items-center justify-center">
-                <canvas id="capacityChart"></canvas>
+    <div class="card">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-700">Analytics Dashboard</h2>
+            <div class="flex gap-2">
+                <button class="tab-button active" onclick="switchView('banks')" id="banksViewBtn">Banks</button>
+                <button class="tab-button" onclick="switchView('erps')" id="erpsViewBtn">ERPs</button>
+                <button class="tab-button" onclick="switchView('combined')" id="combinedViewBtn">Combined</button>
             </div>
         </div>
 
-        <!-- Chart 2: Funnel Distribution Filtered -->
-        <div class="card lg:col-span-2">
-            <h2 id="funnelChartTitle" class="text-xl font-semibold text-gray-700 mb-4">Funnel Distribution for Team Total</h2>
-            <div class="mb-4 flex items-center space-x-3">
-                <label for="seFilter" class="text-sm font-medium text-gray-700">Filter By SE:</label>
-                <select id="seFilter" class="rounded-md border-gray-300 shadow-sm p-2 border bg-white" onchange="refreshDashboard()">
-                    <option value="All SEs">All SEs (Team Total)</option>
-                    <option value="Rudra">Rudra</option>
-                    <option value="David">David</option>
-                    <option value="Liam">Liam</option>
-                </select>
+        <!-- Banks View -->
+        <div id="banksView" class="view-container">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Chart 1: SE Capacity for Banks -->
+                <div class="lg:col-span-1 flex flex-col justify-center">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 text-center">SE Capacity (Banks)</h3>
+                    <div class="h-64 flex items-center justify-center">
+                        <canvas id="bankCapacityChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Bank Funnel Distribution -->
+                <div class="lg:col-span-2">
+                    <h3 id="bankFunnelTitle" class="text-lg font-semibold text-gray-700 mb-4">Bank Funnel Distribution</h3>
+                    <div class="mb-4 flex items-center space-x-3">
+                        <label for="bankSeFilter" class="text-sm font-medium text-gray-700">Filter By SE:</label>
+                        <select id="bankSeFilter" class="rounded-md border-gray-300 shadow-sm p-2 border bg-white" onchange="refreshDashboard()">
+                            <option value="All">All SEs</option>
+                            <option value="Rudra">Rudra</option>
+                            <option value="David">David</option>
+                            <option value="Liam">Liam</option>
+                        </select>
+                    </div>
+                    <div class="h-80">
+                        <canvas id="bankFunnelChart"></canvas>
+                    </div>
+                </div>
             </div>
-            <div class="h-80">
-                <canvas id="funnelChart"></canvas>
+        </div>
+
+        <!-- ERPs View -->
+        <div id="erpsView" class="view-container" style="display: none;">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Chart 3: SE Capacity for ERPs -->
+                <div class="lg:col-span-1 flex flex-col justify-center">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 text-center">SE Capacity (ERPs)</h3>
+                    <div class="h-64 flex items-center justify-center">
+                        <canvas id="erpCapacityChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 4: ERP Funnel Distribution -->
+                <div class="lg:col-span-2">
+                    <h3 id="erpFunnelTitle" class="text-lg font-semibold text-gray-700 mb-4">ERP Funnel Distribution</h3>
+                    <div class="mb-4 flex items-center space-x-3">
+                        <label for="erpSeFilter" class="text-sm font-medium text-gray-700">Filter By SE:</label>
+                        <select id="erpSeFilter" class="rounded-md border-gray-300 shadow-sm p-2 border bg-white" onchange="refreshDashboard()">
+                            <option value="All">All SEs</option>
+                            <option value="Rudra">Rudra</option>
+                            <option value="David">David</option>
+                            <option value="Liam">Liam</option>
+                        </select>
+                    </div>
+                    <div class="h-80">
+                        <canvas id="erpFunnelChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Combined View -->
+        <div id="combinedView" class="view-container" style="display: none;">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <!-- Chart 5: Total SE Capacity (Banks + ERPs) -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 text-center">Total SE Capacity (All Assignments)</h3>
+                    <div class="h-64">
+                        <canvas id="totalCapacityChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 6: Banks vs ERPs Distribution -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 text-center">Banks vs ERPs Distribution</h3>
+                    <div class="h-64">
+                        <canvas id="typeDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Chart 7: SE Breakdown by Type -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 text-center">SE Assignments by Type</h3>
+                    <div class="h-80">
+                        <canvas id="seTypeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 8: Funnel Stage Comparison -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 text-center">Funnel Stages (Banks vs ERPs)</h3>
+                    <div class="h-80">
+                        <canvas id="stageCombinedChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- 3. RAW DATA TABLE -->
     <div class="card">
-        <h2 class="text-xl font-semibold text-gray-700 mb-4">Raw Assignment Data (Click Delete to Remove)</h2>
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-700">All Assignments</h2>
+            <div class="flex gap-2">
+                <label class="text-sm font-medium text-gray-700 self-center">Filter:</label>
+                <select id="tableTypeFilter" class="rounded-md border-gray-300 shadow-sm p-2 border bg-white text-sm" onchange="renderTable()">
+                    <option value="All">All Types</option>
+                    <option value="Bank">Banks Only</option>
+                    <option value="ERP">ERPs Only</option>
+                </select>
+            </div>
+        </div>
         <div class="data-table-container">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50 sticky top-0">
                     <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Solution Engineer</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Funnel Stage</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
@@ -141,6 +245,7 @@
     // ========================================
     const SUPABASE_URL = 'https://wrxkjecleusrfkvrcsdh.supabase.co';  // e.g., 'https://xxxxx.supabase.co'
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndyeGtqZWNsZXVzcmZrdnJjc2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI1Mzc5MjgsImV4cCI6MjA3ODExMzkyOH0.0XG2tR0U8nVMcpRc_r7uG2kmeX38l2Adwgv_5rOQG4w';  // Your anon/public key
+    
     // ========================================
 
     // Initialize Supabase client
@@ -154,20 +259,20 @@
         document.getElementById('configNotice').style.display = 'none';
     }
 
-    // --- DEFAULT DATA (used for reset) ---
-    const defaultBankData = [
-        { name: "First National Bank", se: "Rudra", stage: "Middle of Funnel" },
-        { name: "Apex Global Credit", se: "Rudra", stage: "Top of Funnel" },
-        { name: "Community Financials", se: "Rudra", stage: "Middle of Funnel" },
-        { name: "Pacific Coast Trust", se: "David", stage: "Bottom of Funnel" },
-        { name: "Millennium Bank", se: "David", stage: "Top of Funnel" },
-        { name: "New Prospect A", se: "David", stage: "Top of Funnel" },
-        { name: "Aurora Savings Co.", se: "Liam", stage: "Middle of Funnel" },
-        { name: "Global Tech Solutions", se: "Liam", stage: "Bottom of Funnel" },
-        { name: "Scoping Client Z", se: "Liam", stage: "Bottom of Funnel" },
+    // --- DEFAULT DATA ---
+    const defaultAssignments = [
+        { opportunity_name: "First National Bank", se: "Rudra", type: "Bank", stage: "Middle of Funnel" },
+        { opportunity_name: "Apex Global Credit", se: "Rudra", type: "Bank", stage: "Top of Funnel" },
+        { opportunity_name: "SAP Implementation", se: "Rudra", type: "ERP", stage: "Middle of Funnel" },
+        { opportunity_name: "Pacific Coast Trust", se: "David", type: "Bank", stage: "Bottom of Funnel" },
+        { opportunity_name: "Oracle Migration", se: "David", type: "ERP", stage: "Top of Funnel" },
+        { opportunity_name: "Millennium Bank", se: "David", type: "Bank", stage: "Top of Funnel" },
+        { opportunity_name: "Aurora Savings Co.", se: "Liam", type: "Bank", stage: "Middle of Funnel" },
+        { opportunity_name: "NetSuite Integration", se: "Liam", type: "ERP", stage: "Bottom of Funnel" },
+        { opportunity_name: "Global Tech Bank", se: "Liam", type: "Bank", stage: "Bottom of Funnel" },
     ];
 
-    let bankData = [];
+    let assignments = [];
     const funnelStages = ["Top of Funnel", "Middle of Funnel", "Bottom of Funnel"];
     const seNames = ["Rudra", "David", "Liam"];
     const stageColors = {
@@ -176,8 +281,8 @@
         "Bottom of Funnel": '#F59E0B',
     };
 
-    let capacityChartInstance = null;
-    let funnelChartInstance = null;
+    let chartInstances = {};
+    let currentView = 'banks';
 
     // --- UTILITY FUNCTIONS ---
     
@@ -189,11 +294,25 @@
         alert('Error: ' + message);
     }
 
+    function switchView(view) {
+        currentView = view;
+        
+        document.getElementById('banksViewBtn').classList.toggle('active', view === 'banks');
+        document.getElementById('erpsViewBtn').classList.toggle('active', view === 'erps');
+        document.getElementById('combinedViewBtn').classList.toggle('active', view === 'combined');
+        
+        document.getElementById('banksView').style.display = view === 'banks' ? 'block' : 'none';
+        document.getElementById('erpsView').style.display = view === 'erps' ? 'block' : 'none';
+        document.getElementById('combinedView').style.display = view === 'combined' ? 'block' : 'none';
+        
+        refreshDashboard();
+    }
+
     // Load data from Supabase
     async function loadData() {
         if (!isConfigured) {
             console.warn('Supabase not configured. Using default data.');
-            bankData = [...defaultBankData];
+            assignments = [...defaultAssignments];
             refreshDashboard();
             return;
         }
@@ -201,36 +320,37 @@
         showLoading(true);
         try {
             const { data, error } = await supabaseClient
-                .from('banks')
+                .from('assignments')
                 .select('*')
                 .order('id', { ascending: true });
 
             if (error) throw error;
 
             if (data && data.length > 0) {
-                bankData = data;
+                assignments = data;
             } else {
                 console.log('No data in database, using defaults');
-                bankData = [...defaultBankData];
+                assignments = [...defaultAssignments];
             }
         } catch (error) {
             console.error('Error loading data:', error);
             showError('Failed to load data from Supabase: ' + error.message);
-            bankData = [...defaultBankData];
+            assignments = [...defaultAssignments];
         } finally {
             showLoading(false);
             refreshDashboard();
         }
     }
 
-    // Add new bank
-    async function addBank() {
-        const bankName = document.getElementById('bankName').value.trim();
+    // Add new assignment
+    async function addAssignment() {
+        const name = document.getElementById('opportunityName').value.trim();
+        const type = document.getElementById('opportunityType').value;
         const se = document.getElementById('seName').value;
         const stage = document.getElementById('funnelStage').value;
 
-        if (!bankName) {
-            alert('Please enter a bank name');
+        if (!name) {
+            alert('Please enter a name');
             return;
         }
 
@@ -242,46 +362,46 @@
         showLoading(true);
         try {
             const { data, error } = await supabaseClient
-                .from('banks')
-                .insert([{ name: bankName, se: se, stage: stage }])
+                .from('assignments')
+                .insert([{ opportunity_name: name, type: type, se: se, stage: stage }])
                 .select();
 
             if (error) throw error;
 
-            document.getElementById('bankName').value = '';
-            await loadData(); // Reload to get fresh data
+            document.getElementById('opportunityName').value = '';
+            await loadData();
         } catch (error) {
-            console.error('Error adding bank:', error);
-            showError('Failed to add bank: ' + error.message);
+            console.error('Error adding assignment:', error);
+            showError('Failed to add assignment: ' + error.message);
         } finally {
             showLoading(false);
         }
     }
 
-    // Delete bank
-    async function deleteBank(id) {
+    // Delete assignment
+    async function deleteAssignment(id) {
         if (!isConfigured) {
-            alert('Supabase not configured. Please add your credentials.');
+            alert('Supabase not configured.');
             return;
         }
 
-        if (!confirm('Are you sure you want to delete this bank?')) {
+        if (!confirm('Are you sure you want to delete this assignment?')) {
             return;
         }
 
         showLoading(true);
         try {
             const { error } = await supabaseClient
-                .from('banks')
+                .from('assignments')
                 .delete()
                 .eq('id', id);
 
             if (error) throw error;
 
-            await loadData(); // Reload data
+            await loadData();
         } catch (error) {
-            console.error('Error deleting bank:', error);
-            showError('Failed to delete bank: ' + error.message);
+            console.error('Error deleting assignment:', error);
+            showError('Failed to delete assignment: ' + error.message);
         } finally {
             showLoading(false);
         }
@@ -290,32 +410,30 @@
     // Reset to defaults
     async function resetToDefaults() {
         if (!isConfigured) {
-            alert('Supabase not configured. Please add your credentials.');
+            alert('Supabase not configured.');
             return;
         }
 
-        if (!confirm('Are you sure you want to reset all data to defaults? This will affect all users and cannot be undone.')) {
+        if (!confirm('Reset all data to defaults? This affects all users and cannot be undone.')) {
             return;
         }
 
         showLoading(true);
         try {
-            // Delete all existing data
             const { error: deleteError } = await supabaseClient
-                .from('banks')
+                .from('assignments')
                 .delete()
-                .neq('id', 0); // Delete all rows
+                .neq('id', 0);
 
             if (deleteError) throw deleteError;
 
-            // Insert default data
             const { error: insertError } = await supabaseClient
-                .from('banks')
-                .insert(defaultBankData);
+                .from('assignments')
+                .insert(defaultAssignments);
 
             if (insertError) throw insertError;
 
-            await loadData(); // Reload data
+            await loadData();
         } catch (error) {
             console.error('Error resetting data:', error);
             showError('Failed to reset data: ' + error.message);
@@ -324,23 +442,10 @@
         }
     }
 
-    // Calculate metrics for charts
-    function calculateMetrics(filterSE) {
-        let filteredData = bankData;
-        
-        if (filterSE && filterSE !== 'All SEs') {
-            filteredData = bankData.filter(bank => bank.se === filterSE);
-        }
-
-        const seCounts = seNames.map(se => bankData.filter(bank => bank.se === se).length);
-        const stageCounts = funnelStages.map(stage => filteredData.filter(bank => bank.stage === stage).length);
-        
-        return { seCounts, stageCounts, filteredData };
-    }
-
     // Render the table
     function renderTable() {
         const tableBody = document.getElementById('dataTableBody');
+        const typeFilter = document.getElementById('tableTypeFilter').value;
         tableBody.innerHTML = '';
 
         const seColorMap = {
@@ -349,42 +454,57 @@
             "Liam": "bg-amber-50"
         };
 
-        bankData.forEach((bank) => {
+        const filteredAssignments = typeFilter === 'All' ? 
+            assignments : 
+            assignments.filter(a => a.type === typeFilter);
+
+        filteredAssignments.forEach((assignment) => {
             const row = tableBody.insertRow();
-            row.className = `whitespace-nowrap transition-colors duration-150 hover:bg-gray-100 ${seColorMap[bank.se]}`;
+            row.className = `whitespace-nowrap transition-colors duration-150 hover:bg-gray-100 ${seColorMap[assignment.se]}`;
+            
+            const typeBadgeColor = assignment.type === 'Bank' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
             
             row.innerHTML = `
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">${bank.name}</td>
-                <td class="px-6 py-4 text-sm text-gray-500">${bank.se}</td>
+                <td class="px-6 py-4 text-sm">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${typeBadgeColor}">
+                        ${assignment.type}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">${assignment.opportunity_name}</td>
+                <td class="px-6 py-4 text-sm text-gray-500">${assignment.se}</td>
                 <td class="px-6 py-4">
-                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" style="background-color: ${stageColors[bank.stage]}20; color: ${stageColors[bank.stage]};">
-                        ${bank.stage}
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" style="background-color: ${stageColors[assignment.stage]}20; color: ${stageColors[assignment.stage]};">
+                        ${assignment.stage}
                     </span>
                 </td>
                 <td class="px-6 py-4 text-sm font-medium">
-                    <button class="delete-btn" onclick="deleteBank(${bank.id})">Delete</button>
+                    <button class="delete-btn" onclick="deleteAssignment(${assignment.id})">Delete</button>
                 </td>
             `;
         });
     }
 
-    // Update Capacity Chart
-    function updateCapacityChart(seCounts) {
-        const ctx = document.getElementById('capacityChart').getContext('2d');
-
-        if (capacityChartInstance) {
-            capacityChartInstance.destroy();
+    // Destroy chart if exists
+    function destroyChart(chartId) {
+        if (chartInstances[chartId]) {
+            chartInstances[chartId].destroy();
+            chartInstances[chartId] = null;
         }
+    }
 
-        capacityChartInstance = new Chart(ctx, {
+    // Create bar chart
+    function createBarChart(canvasId, labels, data, title, colors) {
+        destroyChart(canvasId);
+        const ctx = document.getElementById(canvasId).getContext('2d');
+
+        chartInstances[canvasId] = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: seNames,
+                labels: labels,
                 datasets: [{
-                    label: 'Banks Assigned',
-                    data: seCounts,
-                    backgroundColor: ['#4F46E5', '#10B981', '#F59E0B'],
-                    borderColor: ['#3730A3', '#059669', '#D97706'],
+                    label: title,
+                    data: data,
+                    backgroundColor: colors || ['#4F46E5', '#10B981', '#F59E0B'],
                     borderWidth: 1,
                     borderRadius: 4,
                 }]
@@ -396,7 +516,7 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        title: { display: true, text: 'Number of Banks' },
+                        title: { display: true, text: 'Count' },
                         ticks: { precision: 0 }
                     }
                 }
@@ -404,28 +524,20 @@
         });
     }
 
-    // Update Funnel Chart
-    function updateFunnelChart(stageCounts, filterSE) {
-        const ctx = document.getElementById('funnelChart').getContext('2d');
-        const total = stageCounts.reduce((a, b) => a + b, 0);
-        
-        if (funnelChartInstance) {
-            funnelChartInstance.destroy();
-        }
-        
-        const titleElement = document.getElementById('funnelChartTitle');
-        titleElement.textContent = filterSE === 'All SEs' ? 
-            'Funnel Distribution for Team Total' : 
-            `Funnel Distribution for ${filterSE}`;
+    // Create doughnut chart
+    function createDoughnutChart(canvasId, labels, data, title) {
+        destroyChart(canvasId);
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        const total = data.reduce((a, b) => a + b, 0);
 
-        funnelChartInstance = new Chart(ctx, {
+        chartInstances[canvasId] = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: funnelStages,
+                labels: labels,
                 datasets: [{
-                    label: 'Number of Banks',
-                    data: stageCounts,
-                    backgroundColor: funnelStages.map(stage => stageColors[stage]),
+                    label: title,
+                    data: data,
+                    backgroundColor: labels.map(label => stageColors[label] || '#6b7280'),
                     hoverOffset: 4,
                 }]
             },
@@ -441,7 +553,7 @@
                                 if (label) { label += ': '; }
                                 if (context.parsed !== null) {
                                     const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
-                                    label += `${context.parsed} Banks (${percentage}%)`;
+                                    label += `${context.parsed} (${percentage}%)`;
                                 }
                                 return label;
                             }
@@ -452,33 +564,137 @@
         });
     }
 
-    // Refresh dashboard
-    function refreshDashboard() {
-        const filterSE = document.getElementById('seFilter').value;
-        const { seCounts, stageCounts } = calculateMetrics(filterSE);
-        
-        renderTable();
-        updateCapacityChart(calculateMetrics('All SEs').seCounts);
-        updateFunnelChart(stageCounts, filterSE);
+    // Create grouped bar chart
+    function createGroupedBarChart(canvasId, labels, datasets) {
+        destroyChart(canvasId);
+        const ctx = document.getElementById(canvasId).getContext('2d');
+
+        chartInstances[canvasId] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true, position: 'top' } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
+                    }
+                }
+            }
+        });
     }
 
-    // Set up real-time subscription for live updates
+    // Refresh dashboard
+    function refreshDashboard() {
+        renderTable();
+
+        if (currentView === 'banks') {
+            updateBanksView();
+        } else if (currentView === 'erps') {
+            updateErpsView();
+        } else if (currentView === 'combined') {
+            updateCombinedView();
+        }
+    }
+
+    function updateBanksView() {
+        const banks = assignments.filter(a => a.type === 'Bank');
+        const seFilter = document.getElementById('bankSeFilter').value;
+        
+        const filteredBanks = seFilter === 'All' ? banks : banks.filter(b => b.se === seFilter);
+        
+        // SE Capacity for Banks
+        const bankSeCounts = seNames.map(se => banks.filter(b => b.se === se).length);
+        createBarChart('bankCapacityChart', seNames, bankSeCounts, 'Banks', ['#4F46E5', '#10B981', '#F59E0B']);
+        
+        // Bank Funnel Distribution
+        const bankStageCounts = funnelStages.map(stage => filteredBanks.filter(b => b.stage === stage).length);
+        document.getElementById('bankFunnelTitle').textContent = 
+            seFilter === 'All' ? 'Bank Funnel Distribution (All SEs)' : `Bank Funnel Distribution (${seFilter})`;
+        createDoughnutChart('bankFunnelChart', funnelStages, bankStageCounts, 'Banks');
+    }
+
+    function updateErpsView() {
+        const erps = assignments.filter(a => a.type === 'ERP');
+        const seFilter = document.getElementById('erpSeFilter').value;
+        
+        const filteredErps = seFilter === 'All' ? erps : erps.filter(e => e.se === seFilter);
+        
+        // SE Capacity for ERPs
+        const erpSeCounts = seNames.map(se => erps.filter(e => e.se === se).length);
+        createBarChart('erpCapacityChart', seNames, erpSeCounts, 'ERPs', ['#4F46E5', '#10B981', '#F59E0B']);
+        
+        // ERP Funnel Distribution
+        const erpStageCounts = funnelStages.map(stage => filteredErps.filter(e => e.stage === stage).length);
+        document.getElementById('erpFunnelTitle').textContent = 
+            seFilter === 'All' ? 'ERP Funnel Distribution (All SEs)' : `ERP Funnel Distribution (${seFilter})`;
+        createDoughnutChart('erpFunnelChart', funnelStages, erpStageCounts, 'ERPs');
+    }
+
+    function updateCombinedView() {
+        const banks = assignments.filter(a => a.type === 'Bank');
+        const erps = assignments.filter(a => a.type === 'ERP');
+        
+        // Total SE Capacity
+        const totalSeCounts = seNames.map(se => assignments.filter(a => a.se === se).length);
+        createBarChart('totalCapacityChart', seNames, totalSeCounts, 'Total Assignments', ['#4F46E5', '#10B981', '#F59E0B']);
+        
+        // Banks vs ERPs Distribution
+        createDoughnutChart('typeDistributionChart', ['Banks', 'ERPs'], [banks.length, erps.length], 'Type');
+        
+        // SE Assignments by Type
+        const seTypeDatasets = [
+            {
+                label: 'Banks',
+                data: seNames.map(se => banks.filter(b => b.se === se).length),
+                backgroundColor: '#3b82f6',
+            },
+            {
+                label: 'ERPs',
+                data: seNames.map(se => erps.filter(e => e.se === se).length),
+                backgroundColor: '#8b5cf6',
+            }
+        ];
+        createGroupedBarChart('seTypeChart', seNames, seTypeDatasets);
+        
+        // Funnel Stage Comparison
+        const stageDatasets = [
+            {
+                label: 'Banks',
+                data: funnelStages.map(stage => banks.filter(b => b.stage === stage).length),
+                backgroundColor: '#3b82f6',
+            },
+            {
+                label: 'ERPs',
+                data: funnelStages.map(stage => erps.filter(e => e.stage === stage).length),
+                backgroundColor: '#8b5cf6',
+            }
+        ];
+        createGroupedBarChart('stageCombinedChart', funnelStages, stageDatasets);
+    }
+
+    // Set up real-time subscription
     function setupRealtimeSubscription() {
         if (!isConfigured) return;
 
         supabaseClient
-            .channel('banks-changes')
+            .channel('assignments-changes')
             .on('postgres_changes', 
-                { event: '*', schema: 'public', table: 'banks' },
+                { event: '*', schema: 'public', table: 'assignments' },
                 (payload) => {
                     console.log('Change received!', payload);
-                    loadData(); // Reload data when changes occur
+                    loadData();
                 }
             )
             .subscribe();
     }
 
-    // Initialize on load
+    // Initialize
     window.onload = function() {
         loadData();
         setupRealtimeSubscription();
