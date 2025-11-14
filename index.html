@@ -416,6 +416,18 @@
         }
     }
 
+    // Update assignment field with color refresh for stage dropdown
+    async function updateAssignmentAndRefreshColor(selectElement, id, field, value) {
+        // Immediately update the dropdown color for instant feedback
+        if (field === 'stage') {
+            selectElement.style.backgroundColor = stageColors[value] + '20';
+            selectElement.style.color = stageColors[value];
+        }
+        
+        // Then save to database
+        await updateAssignment(id, field, value);
+    }
+
     // Update assignment field
     async function updateAssignment(id, field, value) {
         if (!isConfigured) {
@@ -441,8 +453,8 @@
                 assignment[field] = value;
             }
 
-            showLoading(false);
-            refreshDashboard();
+            // Reload data to ensure UI is in sync
+            await loadData();
             return true;
         } catch (error) {
             console.error('Error updating assignment:', error);
@@ -565,7 +577,7 @@
                 </td>
                 <td class="px-6 py-4 text-sm">
                     <select 
-                        onchange="updateAssignment(${assignment.id}, 'stage', this.value)"
+                        onchange="updateAssignmentAndRefreshColor(this, ${assignment.id}, 'stage', this.value)"
                         class="text-xs border-gray-300 rounded px-2 py-1 font-semibold hover:border-indigo-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                         style="background-color: ${stageColors[assignment.stage]}20; color: ${stageColors[assignment.stage]};"
                     >
